@@ -32,19 +32,76 @@ d3.csv("nobel_laureates.csv").then(data => {
     // 3: PREPARE DATA
     // 3.a: Categorize data into STEM and Non-STEM
     // Example: Group "physics" into STEM, "literature" into Non-STEM
+    const stemCategories = ["chemistry", "physics", "medicine"];
+    const categorizedData = data.map(d => ({
+        ...d, // Create a new obj with the same properties
+        // Use the STEM categories to classify
+        categoryGroup: stemCategories.includes(d.category) ? "STEM" : "Non-STEM"
+    }));
+
+    console.log("STEM vs. Non-STEM:", categorizedData.slice(0, 5).map(d => ({
+        category: d.category,       // The original category
+        categoryGroup: d.categoryGroup  // The grouped category (STEM/Non-STEM)
+    })));
+
+
 
     // 3.b: Group data by categoryGroup and year, and count entries
     // Use d3.rollup to create a nested data structure
+    const categories = d3.rollup(categorizedData,
+        v => d3.rollup(v,
+            values => values.length, // Aggregation: count laureates in each year
+            d => d.year // Group by year
+        ),
+        // d => d.category // Group by category
+        d => d.categoryGroup // Group by the new "STEM/Non-STEM" category
+    );
+    const lineData = Array.from(categories.entries());
+    //Check the new grouped data structure:
+    // console.log("Categories:", categories);
 
     // Check your work:
     // console.log("Categories:", ...);
 
     // 4: SET SCALES
+    const allYears = Array.from(categories.values())
+        .flatMap(yearMap => Array.from(yearMap.keys()));
+    const xScale = d3.scaleLinear()
+        .domain(d3.extent(allYears))
+        .range([0, width]);
+
+    const yearCounts = Array.from(categories.values())
+        .map(categoryMap => Array.from(categoryMap.values()));
+    const maxCount = d3.max(yearCounts, yearValues => d3.max(yearValues));
+    const yScale = d3.scaleLinear()
+        .domain([0, maxCount + 1])
+        .range([height, 0]);
+
+    const colorScale = d3.scaleOrdinal()
+        .domain(Array.from(categories.keys()))
+        .range(d3.schemeCategory10);
+
+    const line = d3.line()
+        .x(d => xScale(d.year))
+        .y(d => yScale(d.count));
+    
     // 4.a: Define xScale for years using d3.scaleLinear
     // 4.b: Define yScale based on the max count of laureates
     // 4.c: Define colorScale using d3.scaleOrdinal with categories as the domain
 
     // 5: PLOT LINES
+    svgLine.selectAll("path")
+    .data(lineData)
+    .enter()
+    .append("path")
+    .attr("d", d => {
+        const values = Array.from(d[1].entries())
+            .map(([year, count]) => ({ year, count }));
+        return line(values);
+    })
+    .style("stroke", d => colorScale(d[0]))
+    .style("fill", "none")
+    .style("stroke-width", 2);
     // 5.a: CREATE PATH
     // - Use d3.line() to generate paths from grouped data.
     // - Convert the nested data structure into an array of objects containing x (year) and y (count).
@@ -65,13 +122,42 @@ d3.csv("nobel_laureates.csv").then(data => {
     // 6.b: Y-AXIS
     // - Use d3.axisLeft(yScale) to create the y-axis.
     // - Append it to the left of the SVG.
+    svgLine.append("g")
+        .attr("transform", `translate(0,${height})`)
+        .call(d3.axisBottom(xScale).tickFormat(d3.format("d")));
+
+    svgLine.append("g")
+        .call(d3.axisLeft(yScale));
 
     // 7: ADD LABELS
     // 7.a: Title
     // - Add a text element above the chart for the chart title.
 
+    svgLine.append("text")
+        .attr("class", "title")
+        .attr("x", width / 2)
+        .attr("y", -margin.top / 2)
+        .attr("text-anchor", "middle")
+        .style("font-size", "16px")
+        .style("font-weight", "bold")
+        .text("Nobel Laureates Trends: STEM vs Non-STEM");
+
     // 7.b: X-axis label
     // - Add a text element below the x-axis to describe it (e.g., "Year").
+    svgLine.append("text")
+        .attr("class", "axis-label")
+        .attr("x", width / 2)
+        .attr("y", height + margin.bottom - 10)
+        .attr("text-anchor", "middle")
+        .text("Year");
+
+    svgLine.append("text")
+        .attr("class", "axis-label")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -margin.left + 20)
+        .attr("x", -height / 2)
+        .attr("text-anchor", "middle")
+        .text("Number of Laureates");
 
     // 7.c: Y-axis label
     // - Add a rotated text element beside the y-axis to describe it (e.g., "Number of Laureates").
@@ -80,6 +166,25 @@ d3.csv("nobel_laureates.csv").then(data => {
     // 8.a: CREATE AND POSITION SHAPE
     // - Use <g> elements to create groups for each legend item.
     // - Position each legend group horizontally or vertically.
+    const legend = svgLine.selectAll(".legend")
+        .data(lineData)
+        .enter()
+        .append("g")
+        .attr("class", "legend")
+        .attr("transform", (d, i) => `translate(${width - 150}, ${i * 20 - 30})`);
+    legend.append("rect")
+        .attr("x", 10)
+        .attr("width", 10)
+        .attr("height", 10)
+        .style("fill", d => colorScale(d[0]));
+
+    legend.append("text")
+        .attr("x", 30)
+        .attr("y", 10)
+        .attr("text-anchor", "start")
+        .style("alignment-baseline", "middle")
+        .text(d => d[0]);
+});
 
     // 8.b: ADD COLOR SQUARES
     // - Append <rect> elements to the legend groups.
@@ -88,4 +193,4 @@ d3.csv("nobel_laureates.csv").then(data => {
     // 8.c: ADD TEXT
     // - Append <text> elements to the legend groups.
     // - Position and align the text beside each color square.
-});
+
